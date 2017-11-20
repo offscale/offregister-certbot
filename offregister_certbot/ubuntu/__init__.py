@@ -3,7 +3,7 @@ from itertools import imap
 from sys import modules
 
 from fabric.context_managers import cd
-from fabric.operations import _run_command, sudo, run
+from fabric.operations import _run_command, sudo
 
 from offregister_fab_utils.apt import apt_depends
 from offregister_fab_utils.ubuntu.systemd import restart_systemd
@@ -62,7 +62,7 @@ def add_cert1(domains, email, server='nginx', **kwargs):
         domains=' '.join("-d '{}'".format(domain) for domain in domains)
     ))
     cmd('rm -rf {}/*nginx'.format(static_dirs[0][:static_dirs[0].rfind('/')]))
-    cmd('rm {}'.format('{}/{} '.format(sites_enabled, domain) for domain in domains))
+    cmd('rm {}'.format(' '.join('{}/{}'.format(sites_enabled, domain) for domain in domains)))
 
     cmd(';'.join("mv '{conf}' {sites_enabled}/".format(conf=conf.replace(sites_enabled, sites_disabled),
                                                        sites_disabled=sites_disabled,
