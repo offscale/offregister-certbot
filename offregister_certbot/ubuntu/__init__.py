@@ -62,6 +62,7 @@ def add_cert1(domains, email, server='nginx', **kwargs):
         domains=' '.join("-d '{}'".format(domain) for domain in domains)
     ))
     cmd('rm -rf {}/*nginx'.format(static_dirs[0][:static_dirs[0].rfind('/')]))
+    cmd('rm {}'.format('{}/{} '.format(sites_enabled, domain) for domain in domains))
 
     cmd(';'.join("mv '{conf}' {sites_enabled}/".format(conf=conf.replace(sites_enabled, sites_disabled),
                                                        sites_disabled=sites_disabled,
