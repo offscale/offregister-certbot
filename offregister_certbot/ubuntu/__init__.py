@@ -1,3 +1,7 @@
+from __future__ import print_function
+
+import sys
+
 from cStringIO import StringIO
 from functools import partial
 from itertools import imap
@@ -43,10 +47,17 @@ def add_cert1(domains, email, server='nginx', **kwargs):
 
     cmd = partial(_run_command, user=kwargs.get('as_user', 'root'), group=kwargs.get('as_group', 'root'),
                   shell_escape=False, sudo=True)
-    confs = cmd('grep -lER {pat} {sites_enabled}'.format(
+
+    _grep_conf = 'grep -lER {pat} {sites_enabled}'.format(
         pat='-e '.join("'server_name[[:space:]]+{domain}'".format(domain=domain) for domain in domains),
-        sites_enabled=sites_enabled
-    ))
+        sites_enabled=sites_enabled)
+
+    confs = cmd(_grep_conf, warn_only=True)
+
+    if not confs:
+        print(_grep_conf, file=sys.stderr)
+        raise ReferenceError('No confs found matching domains searched for')
+
     # Could do the `mv /etc/nginx/sites-enabled/{foo,bar}` syntax instead...
     cmd(';'.join("mv '{conf}' '{sites_disabled}'/".format(conf=conf, sites_disabled=sites_disabled)
                  for conf in confs.split('\n')))
@@ -92,8 +103,9 @@ def apply_cert2(domains, use_sudo=True, **kwargs):
         with open(tempfile, 'rt') as f:
             conf = load(f)
         new_conf = apply_attributes(conf,
-                                    nginx_emit.secure_attr('/etc/letsencrypt/live/{domain}/fullchain.pem'.format(domain=domain),
-                                                '/etc/letsencrypt/live/{domain}/privkey.pem'.format(domain=domain)))
+                                    nginx_emit.secure_attr(
+                                        '/etc/letsencrypt/live/{domain}/fullchain.pem'.format(domain=domain),
+                                        '/etc/letsencrypt/live/{domain}/privkey.pem'.format(domain=domain)))
         remove(tempfile)
 
         new_conf = loads(nginx_emit.redirect_block(server_name=domain, port=80)) + new_conf
