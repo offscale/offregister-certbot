@@ -12,7 +12,7 @@ from tempfile import mkstemp
 import offregister_nginx_static.ubuntu as nginx
 from fabric.context_managers import cd
 from fabric.contrib.files import exists
-from fabric.operations import _run_command, sudo, get, put
+from fabric.operations import _run_command, sudo, get, put, run
 from nginx_parse_emit import emit as nginx_emit
 from nginx_parse_emit.utils import apply_attributes
 from nginxparser import dumps, load, loads
@@ -25,8 +25,14 @@ logger = get_logger(modules[__name__].__name__)
 
 
 def install0(**kwargs):
-    sudo('add-apt-repository -y ppa:certbot/certbot')
-    apt_depends('certbot', 'python-certbot-nginx')
+    uname = run('uname -v')
+    if 'Ubuntu' in uname:
+        sudo('add-apt-repository -y ppa:certbot/certbot')
+        apt_depends('certbot', 'python-certbot-nginx')
+    elif 'Debian' in uname:
+        sudo('apt-get install -y certbot python-certbot-nginx -t stretch-backports')
+    else:
+        raise NotImplementedError()
 
 
 def add_cert1(domains, email, server='nginx', **kwargs):
