@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import sys
-
 from cStringIO import StringIO
 from functools import partial
 from itertools import imap
@@ -17,6 +16,7 @@ from nginx_parse_emit import emit as nginx_emit
 from nginx_parse_emit.utils import apply_attributes
 from nginxparser import dumps, load, loads
 from offregister_fab_utils.apt import apt_depends
+from offregister_fab_utils.fs import cmd_avail
 from offregister_fab_utils.ubuntu.systemd import restart_systemd
 
 from offregister_certbot import get_logger
@@ -25,6 +25,8 @@ logger = get_logger(modules[__name__].__name__)
 
 
 def install0(**kwargs):
+    if cmd_avail('certbot'):
+        return 'certbot already installed'
     uname = run('uname -v')
     if 'Ubuntu' in uname:
         sudo('add-apt-repository -y ppa:certbot/certbot')
