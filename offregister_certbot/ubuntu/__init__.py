@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-import sys
+from datetime import datetime
 from platform import python_version_tuple
 
 from nginx_parse_emit.emit import upsert_ssl_cert_to_443_block, upsert_redirect_to_443_block
@@ -8,8 +8,12 @@ from nginxparser import dumps
 
 if python_version_tuple()[0] == '2':
     from cStringIO import StringIO
+    from itertools import imap, ifilter
 else:
     from io import StringIO
+
+    imap = map
+    ifilter = filter
 
 from functools import partial
 from itertools import imap
@@ -19,7 +23,6 @@ from tempfile import mkstemp
 
 import offregister_nginx_static.ubuntu as nginx
 from fabric.context_managers import cd
-from fabric.contrib.files import exists
 from fabric.operations import _run_command, sudo, get, put, run
 
 from offregister_fab_utils.apt import apt_depends
@@ -70,11 +73,11 @@ def add_cert1(domains, email, server='nginx', **kwargs):
     confs = cmd(_grep_conf, warn_only=True)
 
     if not confs:
-        print(_grep_conf, file=sys.stderr)
+        # print(_grep_conf, file=sys.stderr)
         raise ReferenceError('No confs found matching domains searched for')
 
     # Could do the `mv /etc/nginx/sites-enabled/{foo,bar}` syntax instead...
-    cmd(';'.join("mv '{conf}' '{sites_disabled}'/".format(conf=conf, sites_disabled=sites_disabled)
+    cmd(';'.join("mv '{conf}' '{sites_disabled}/'".format(conf=conf, sites_disabled=sites_disabled)
                  for conf in confs.split('\n')))
 
     def apply_conf(domain):
@@ -88,14 +91,35 @@ def add_cert1(domains, email, server='nginx', **kwargs):
         return root
 
     static_dirs = tuple(imap(apply_conf, domains))
-    restart_systemd('nginx')  # reload didn't work :(
-    cmd('certbot certonly {email} --webroot {webroots} {domains} --agree-tos --no-eff-email'.format(
-        email="-m '{email}'".format(email=email),
-        webroots=' '.join("-w '{}'".format(wr) for wr in static_dirs),
-        domains=' '.join("-d '{}'".format(domain) for domain in domains)
-    ))
-    cmd('rm -rf {}/*nginx'.format(static_dirs[0][:static_dirs[0].rfind('/')]))
-    cmd('rm {}'.format(' '.join('{}/{}'.format(sites_enabled, domain) for domain in domains)))
+
+    def exclude_valid_certs(domain):
+        cert_details = sudo('certbot certificates --cert-name {domain}'.format(domain=domain))
+
+        if 'Expiry Date' not in cert_details:
+            return domain
+        elif '(VALID' not in cert_details:
+            return domain
+
+        cert_expiry = next(imap(lambda s: s.partition(':')[2].rpartition('(')[0].strip(),
+                                ifilter(lambda s: s.lstrip().startswith('Expiry Date'),
+                                        cert_details.split('\n'))), None)
+        if cert_expiry is None:
+            return domain
+        cert_expiry = datetime.strptime(cert_expiry, '%Y-%m-%d %H:%M:%S+00:00')
+        if (cert_expiry - datetime.now()).days < 30:
+            return domain
+        return None
+
+    domains = tuple(filter(None, map(exclude_valid_certs, domains)))
+
+    if domains:
+        cmd('certbot certonly {email} --webroot {webroots} {domains} --agree-tos --no-eff-email'.format(
+            email="-m '{email}'".format(email=email),
+            webroots=' '.join("-w '{}'".format(wr) for wr in static_dirs),
+            domains=' '.join("-d '{}'".format(domain) for domain in domains)
+        ))
+        cmd('rm -rf {}/*nginx'.format(static_dirs[0][:static_dirs[0].rfind('/')]))
+        cmd('rm {}'.format(' '.join('{}/{}'.format(sites_enabled, domain) for domain in domains)))
 
     cmd(';'.join("mv '{conf}' {sites_enabled}/".format(conf=conf.replace(sites_enabled, sites_disabled),
                                                        sites_disabled=sites_disabled,
@@ -112,9 +136,7 @@ def apply_cert2(domains, use_sudo=True, **kwargs):
         if domain.endswith('.conf'):
             domain = domain[:len('.conf') - 2]
         assert domain in certs_dirname, '{domain} doesn\'t have certs generated'.format(domain=domain)
-        conf_name = '/etc/nginx/sites-enabled/{nginx_conf}'.format(nginx_conf=domain)
-        if not conf_name.endswith('.conf') and not exists(conf_name):
-            conf_name += '.conf'
+        conf_name = '/etc/nginx/sites-enabled/{nginx_conf}.conf'.format(nginx_conf=domain)
         # cStringIO.StringIO, StringIO.StringIO, TemporaryFile, SpooledTemporaryFile all failed :(
         tempfile = mkstemp(domain)[1]
         get(remote_path=conf_name, local_path=tempfile, use_sudo=use_sudo)
