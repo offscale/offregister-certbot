@@ -1,7 +1,16 @@
 from __future__ import print_function
 
 import sys
-from cStringIO import StringIO
+from platform import python_version_tuple
+
+from nginx_parse_emit.emit import upsert_ssl_cert_to_443_block, upsert_redirect_to_443_block
+from nginxparser import dumps
+
+if python_version_tuple()[0] == '2':
+    from cStringIO import StringIO
+else:
+    from io import StringIO
+
 from functools import partial
 from itertools import imap
 from os import remove
@@ -12,9 +21,7 @@ import offregister_nginx_static.ubuntu as nginx
 from fabric.context_managers import cd
 from fabric.contrib.files import exists
 from fabric.operations import _run_command, sudo, get, put, run
-from nginx_parse_emit import emit as nginx_emit
-from nginx_parse_emit.utils import apply_attributes
-from nginxparser import dumps, load, loads
+
 from offregister_fab_utils.apt import apt_depends
 from offregister_fab_utils.fs import cmd_avail
 from offregister_fab_utils.ubuntu.systemd import restart_systemd
@@ -98,9 +105,12 @@ def add_cert1(domains, email, server='nginx', **kwargs):
 
 
 def apply_cert2(domains, use_sudo=True, **kwargs):
-    certs_dirname = frozenset(d for d in sudo('ls -AQlx /etc/letsencrypt/live').split('"') if len(d.strip()))
+    certs_dirname = frozenset(d for d in sudo('ls -AQlx /etc/letsencrypt/live').split('"')
+                              if len(d.strip()))
 
     def apply_cert(domain):
+        if domain.endswith('.conf'):
+            domain = domain[:len('.conf') - 2]
         assert domain in certs_dirname, '{domain} doesn\'t have certs generated'.format(domain=domain)
         conf_name = '/etc/nginx/sites-enabled/{nginx_conf}'.format(nginx_conf=domain)
         if not conf_name.endswith('.conf') and not exists(conf_name):
@@ -108,19 +118,20 @@ def apply_cert2(domains, use_sudo=True, **kwargs):
         # cStringIO.StringIO, StringIO.StringIO, TemporaryFile, SpooledTemporaryFile all failed :(
         tempfile = mkstemp(domain)[1]
         get(remote_path=conf_name, local_path=tempfile, use_sudo=use_sudo)
-        with open(tempfile, 'rt') as f:
-            conf = load(f)
-        new_conf = apply_attributes(conf,
-                                    nginx_emit.secure_attr(
-                                        '/etc/letsencrypt/live/{domain}/fullchain.pem'.format(domain=domain),
-                                        '/etc/letsencrypt/live/{domain}/privkey.pem'.format(domain=domain)))
+
+        updated_conf = upsert_ssl_cert_to_443_block(
+            conf_file=upsert_redirect_to_443_block(conf_file=tempfile, server_name=domain),
+            server_name=domain,
+            ssl_certificate='/etc/letsencrypt/live/{domain}/fullchain.pem'.format(domain=domain),
+            ssl_certificate_key='/etc/letsencrypt/live/{domain}/privkey.pem'.format(domain=domain)
+        )
+
         remove(tempfile)
 
-        new_conf = loads(nginx_emit.redirect_block(server_name=domain, port=80)) + new_conf
-
-        sio = StringIO()
-        sio.write(dumps(new_conf))
-        put(sio, conf_name, use_sudo=use_sudo)
+        sio1 = StringIO()
+        sio1.write(dumps(updated_conf))
+        sio1.seek(0)
+        put(sio1, conf_name, use_sudo=use_sudo)
         return conf_name
 
     r = tuple(imap(apply_cert, domains))
