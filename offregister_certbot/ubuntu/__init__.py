@@ -67,18 +67,24 @@ def add_cert1(domains, email, server='nginx', **kwargs):
                   shell_escape=False, sudo=True)
 
     _grep_conf = 'grep -lER {pat} {sites_enabled}'.format(
-        pat='-e '.join("'server_name[[:space:]]+{domain}'".format(domain=domain) for domain in domains),
+        pat=' -e ' + ' -e '.join("'server_name[[:space:]]+{domain}'".format(domain=domain) for domain in domains)
+        if len(domains) > 0 else '',
         sites_enabled=sites_enabled)
 
     confs = cmd(_grep_conf, warn_only=True)
 
-    if not confs:
+    if confs.failed:
+        raise EnvironmentError('grep failed with: {}. Failed command: {}'.format(confs, _grep_conf))
+
+    elif not confs:
         # print(_grep_conf, file=sys.stderr)
         raise ReferenceError('No confs found matching domains searched for')
 
-    # Could do the `mv /etc/nginx/sites-enabled/{foo,bar}` syntax instead...
-    cmd(';'.join("mv '{conf}' '{sites_disabled}/'".format(conf=conf, sites_disabled=sites_disabled)
-                 for conf in confs.split('\n')))
+    confs = map(lambda s: s.rstrip().replace(sites_enabled + '/', ''), confs.split('\n'))
+
+    cmd("mv '{sites_enabled}/'{{{confs}}} '{sites_disabled}/'".format(sites_enabled=sites_enabled,
+                                                                      confs=','.join(confs),
+                                                                      sites_disabled=sites_disabled))
 
     def apply_conf(domain):
         root = cmd('mktemp -d --suffix .nginx')
@@ -121,10 +127,10 @@ def add_cert1(domains, email, server='nginx', **kwargs):
         cmd('rm -rf {}/*nginx'.format(static_dirs[0][:static_dirs[0].rfind('/')]))
         cmd('rm {}'.format(' '.join('{}/{}'.format(sites_enabled, domain) for domain in domains)))
 
-    cmd(';'.join("mv '{conf}' {sites_enabled}/".format(conf=conf.replace(sites_enabled, sites_disabled),
-                                                       sites_disabled=sites_disabled,
-                                                       sites_enabled=sites_enabled)
-                 for conf in confs.split('\n')))
+    cmd("mv '{sites_disabled}/'{{{confs}}} '{sites_enabled}/'".format(sites_enabled=sites_enabled,
+                                                                      confs=','.join(confs),
+                                                                      sites_disabled=sites_disabled))
+
     return restart_systemd('nginx')  # reload didn't work :(
 
 
