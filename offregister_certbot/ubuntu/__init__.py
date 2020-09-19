@@ -1,5 +1,5 @@
 from datetime import datetime
-from platform import python_version_tuple
+from sys import version
 
 from nginx_parse_emit.emit import (
     upsert_ssl_cert_to_443_block,
@@ -7,14 +7,11 @@ from nginx_parse_emit.emit import (
 )
 from nginxparser import dumps
 
-if python_version_tuple()[0] == "2":
-    from io import StringIO
+if version[0] == "2":
+    from cStringIO import StringIO
 
 else:
     from io import StringIO
-
-    imap = map
-    ifilter = filter
 
 from functools import partial
 
