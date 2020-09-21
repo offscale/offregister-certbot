@@ -9,7 +9,7 @@ from nginxparser import dumps
 
 if version[0] == "2":
     from cStringIO import StringIO
-
+    from itertools import imap as map, ifilter as filter
 else:
     from io import StringIO
 
