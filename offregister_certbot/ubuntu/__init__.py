@@ -130,16 +130,12 @@ def add_cert1(domains, email, server="nginx", **kwargs):
             return domain
 
         cert_expiry = next(
-            list(
-                map(
-                    lambda s: s.partition(":")[2].rpartition("(")[0].strip(),
-                    list(
-                        filter(
-                            lambda s: s.lstrip().startswith("Expiry Date"),
-                            cert_details.split("\n"),
-                        )
-                    ),
-                )
+            map(
+                lambda s: s.partition(":")[2].rpartition("(")[0].strip(),
+                filter(
+                    lambda s: s.lstrip().startswith("Expiry Date"),
+                    cert_details.split("\n"),
+                ),
             ),
             None,
         )
