@@ -7,6 +7,8 @@ from nginx_parse_emit.emit import (
 )
 from nginxparser import dumps
 
+from offregister_certbot.shared import install
+
 if version[0] == "2":
     from cStringIO import StringIO
     from itertools import imap as map, ifilter as filter
@@ -21,10 +23,8 @@ from tempfile import mkstemp
 
 import offregister_nginx_static.ubuntu as nginx
 from fabric.context_managers import cd
-from fabric.operations import _run_command, sudo, get, put, run
+from fabric.operations import _run_command, sudo, get, put
 
-from offregister_fab_utils.apt import apt_depends
-from offregister_fab_utils.fs import cmd_avail
 from offregister_fab_utils.ubuntu.systemd import restart_systemd
 
 from offregister_certbot import get_logger
@@ -33,16 +33,7 @@ logger = get_logger(modules[__name__].__name__)
 
 
 def install0(**kwargs):
-    if cmd_avail("certbot"):
-        return "certbot already installed"
-    uname = run("uname -v")
-    if "Ubuntu" in uname:
-        sudo("add-apt-repository -y ppa:certbot/certbot")
-        apt_depends("certbot", "python-certbot-nginx")
-    elif "Debian" in uname:
-        sudo("apt-get install -y certbot python-certbot-nginx -t stretch-backports")
-    else:
-        raise NotImplementedError()
+    return install()
 
 
 def add_cert1(domains, email, server="nginx", **kwargs):
