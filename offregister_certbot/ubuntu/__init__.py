@@ -85,9 +85,9 @@ def add_cert1(domains, email, server="nginx", **kwargs):
     confs = [s.rstrip().replace(sites_enabled + "/", "") for s in confs.split("\n")]
 
     cmd(
-        "mv '{sites_enabled}/'{{{confs}}} '{sites_disabled}/'".format(
+        "mv '{sites_enabled}/'{confs} '{sites_disabled}/'".format(
             sites_enabled=sites_enabled,
-            confs=",".join(confs),
+            confs='{{{confs}}}'.format(confs=",".join(confs)) if len(confs) > 1 else "".join(confs),
             sites_disabled=sites_disabled,
         )
     )
@@ -155,9 +155,10 @@ def add_cert1(domains, email, server="nginx", **kwargs):
         )
 
     cmd(
-        "mv '{sites_disabled}/'{{{confs}}} '{sites_enabled}/'".format(
+        "mv '{sites_disabled}/'{confs} '{sites_enabled}/'".format(
             sites_enabled=sites_enabled,
-            confs=",".join(confs),
+            confs='{{{confs}}}'.format(confs=",".join(confs)) if len(confs) > 1
+            else '{confs}'.format(confs="".join(confs)),
             sites_disabled=sites_disabled,
         )
     )
