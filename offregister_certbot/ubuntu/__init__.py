@@ -87,7 +87,9 @@ def add_cert1(domains, email, server="nginx", **kwargs):
     cmd(
         "mv '{sites_enabled}/'{confs} '{sites_disabled}/'".format(
             sites_enabled=sites_enabled,
-            confs='{{{confs}}}'.format(confs=",".join(confs)) if len(confs) > 1 else "".join(confs),
+            confs="{{{confs}}}".format(confs=",".join(confs))
+            if len(confs) > 1
+            else "".join(confs),
             sites_disabled=sites_disabled,
         )
     )
@@ -150,16 +152,25 @@ def add_cert1(domains, email, server="nginx", **kwargs):
         )
         cmd("rm -rf {}/*nginx".format(static_dirs[0][: static_dirs[0].rfind("/")]))
         cmd(
-            "rm {}".format(
-                " ".join("{}/{}".format(sites_enabled, domain) for domain in domains)
+            "rm -f {}".format(
+                " ".join(
+                    "{}/{}".format(
+                        sites_enabled,
+                        domain
+                        if domain.endswith(".conf")
+                        else "{domain}.conf".format(domain=domain),
+                    )
+                    for domain in domains
+                )
             )
         )
 
     cmd(
         "mv '{sites_disabled}/'{confs} '{sites_enabled}/'".format(
             sites_enabled=sites_enabled,
-            confs='{{{confs}}}'.format(confs=",".join(confs)) if len(confs) > 1
-            else '{confs}'.format(confs="".join(confs)),
+            confs="{{{confs}}}".format(confs=",".join(confs))
+            if len(confs) > 1
+            else "{confs}".format(confs="".join(confs)),
             sites_disabled=sites_disabled,
         )
     )
