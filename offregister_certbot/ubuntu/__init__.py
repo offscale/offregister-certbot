@@ -140,6 +140,7 @@ def add_cert1(domains, email, server="nginx", **kwargs):
     domains = tuple([_f for _f in map(exclude_valid_certs, domains) if _f])
 
     if domains:
+        restart_systemd("nginx")
         cmd(
             "certbot certonly {email} --webroot {webroots} {domains} --agree-tos --no-eff-email".format(
                 email="-m '{email}'".format(email=email),
