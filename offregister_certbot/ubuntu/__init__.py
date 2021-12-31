@@ -2,29 +2,29 @@ from datetime import datetime
 from sys import version
 
 from nginx_parse_emit.emit import (
-    upsert_ssl_cert_to_443_block,
     upsert_redirect_to_443_block,
+    upsert_ssl_cert_to_443_block,
 )
 from nginxparser import dumps
 
 from offregister_certbot.shared import install
 
 if version[0] == "2":
+    from itertools import ifilter as filter
+    from itertools import imap as map
+
     from cStringIO import StringIO
-    from itertools import imap as map, ifilter as filter
 else:
     from io import StringIO
 
 from functools import partial
-
 from os import remove
 from sys import modules
 from tempfile import mkstemp
 
 import offregister_nginx_static.ubuntu as nginx
 from fabric.context_managers import cd
-from fabric.operations import _run_command, sudo, get, put
-
+from fabric.operations import _run_command, get, put, sudo
 from offregister_fab_utils.ubuntu.systemd import restart_systemd
 
 from offregister_certbot import get_logger
