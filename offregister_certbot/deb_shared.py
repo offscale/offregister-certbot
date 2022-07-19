@@ -13,7 +13,10 @@ if version[0] == "2":
     from itertools import ifilter as filter
     from itertools import imap as map
 
-    from cStringIO import StringIO
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
 else:
     from io import StringIO
 
@@ -23,8 +26,6 @@ from sys import modules
 from tempfile import mkstemp
 
 import offregister_nginx_static.ubuntu as nginx
-from fabric.context_managers import cd
-from fabric.operations import _run_command, get, put, sudo
 from offregister_fab_utils.ubuntu.systemd import restart_systemd
 
 from offregister_certbot import get_logger
@@ -32,17 +33,24 @@ from offregister_certbot import get_logger
 logger = get_logger(modules[__name__].__name__)
 
 
-def install0(**kwargs):
-    return install()
+def install0(c, **kwargs):
+    """
+    :param c: Connection
+    :type c: ```fabric.connection.Connection```
+    """
+    return install(c)
 
 
-def add_cert1(domains, email, server="nginx", **kwargs):
+def add_cert1(c, domains, email, server="nginx", **kwargs):
     """add_cert1 gets a new LetsEncrypt HTTPS certificate using certbot.
     Because we don't trust the nginx module, we do this process:
     0. move conf(s) for domain(s) to sites-disabled
     1. create new conf(s) for domain(s) in sites-enabled, that point to temporary wwwroot
     2. use certbot to request new certificate
     3. restore previous conf
+
+    :param c: Connection
+    :type c: ```fabric.connection.Connection```
     """
 
     if server != "nginx":
@@ -50,14 +58,12 @@ def add_cert1(domains, email, server="nginx", **kwargs):
 
     sites_enabled = kwargs.get("sites-enabled", "/etc/nginx/sites-enabled")
     sites_disabled = kwargs.get("sites-disabled", "/etc/nginx/sites-disabled")
-    sudo("mkdir -p {sites_disabled}".format(sites_disabled=sites_disabled))
+    c.sudo("mkdir -p {sites_disabled}".format(sites_disabled=sites_disabled))
 
     cmd = partial(
-        _run_command,
+        c.sudo,
         user=kwargs.get("as_user", "root"),
         group=kwargs.get("as_group", "root"),
-        shell_escape=False,
-        sudo=True,
     )
 
     _grep_conf = "grep -lER {pat} {sites_enabled}".format(
@@ -71,9 +77,9 @@ def add_cert1(domains, email, server="nginx", **kwargs):
         sites_enabled=sites_enabled,
     )
 
-    confs = cmd(_grep_conf, warn_only=True)
+    confs = cmd(_grep_conf, warn=True)
 
-    if confs.failed:
+    if confs.exited != 0:
         raise EnvironmentError(
             "grep failed with: {}. Failed command: {}".format(confs, _grep_conf)
         )
@@ -95,8 +101,9 @@ def add_cert1(domains, email, server="nginx", **kwargs):
     )
 
     def apply_conf(domain):
-        root = cmd("mktemp -d --suffix .nginx")
+        root = cmd("mktemp -d --suffix .nginx").stdout
         nginx.setup_conf0(
+            c,
             nginx_conf="static.conf",
             SERVER_NAME=domain,
             WWWROOT=root,
@@ -105,7 +112,7 @@ def add_cert1(domains, email, server="nginx", **kwargs):
             ),
             skip_nginx_restart=True,
         )
-        with cd(root):
+        with c.cd(root):
             cmd("touch index.html")
         cmd("chmod -R 755 {root}".format(root=root))
         return root
@@ -113,7 +120,7 @@ def add_cert1(domains, email, server="nginx", **kwargs):
     static_dirs = tuple(map(apply_conf, domains))
 
     def exclude_valid_certs(domain):
-        cert_details = sudo(
+        cert_details = c.sudo(
             "certbot certificates --cert-name {domain}".format(domain=domain)
         )
 
@@ -139,10 +146,10 @@ def add_cert1(domains, email, server="nginx", **kwargs):
             return domain
         return None
 
-    domains = tuple([_f for _f in map(exclude_valid_certs, domains) if _f])
+    domains = tuple(_f for _f in map(exclude_valid_certs, domains) if _f)
 
     if domains:
-        restart_systemd("nginx")
+        restart_systemd(c, "nginx")
         cmd(
             "certbot certonly {email} --webroot {webroots} {domains} --agree-tos --no-eff-email".format(
                 email="-m '{email}'".format(email=email),
@@ -175,12 +182,18 @@ def add_cert1(domains, email, server="nginx", **kwargs):
         )
     )
 
-    return restart_systemd("nginx")  # reload didn't work :(
+    return restart_systemd(c, "nginx")  # reload didn't work :(
 
 
-def apply_cert2(domains, use_sudo=True, **kwargs):
+def apply_cert2(c, domains, use_sudo=True, **kwargs):
+    """
+    :param c: Connection
+    :type c: ```fabric.connection.Connection```
+    """
     certs_dirname = frozenset(
-        d for d in sudo("ls -AQlx /etc/letsencrypt/live").split('"') if len(d.strip())
+        d
+        for d in c.sudo("ls -AQlx /etc/letsencrypt/live").stdout.split('"')
+        if len(d.strip())
     )
 
     def apply_cert(domain):
@@ -194,7 +207,7 @@ def apply_cert2(domains, use_sudo=True, **kwargs):
         )
         # cStringIO.StringIO, StringIO.StringIO, TemporaryFile, SpooledTemporaryFile all failed :(
         tempfile = mkstemp(domain)[1]
-        get(remote_path=conf_name, local_path=tempfile, use_sudo=use_sudo)
+        c.get(remote_path=conf_name, local_path=tempfile, use_sudo=use_sudo)
 
         updated_conf = upsert_ssl_cert_to_443_block(
             conf_file=upsert_redirect_to_443_block(
@@ -214,10 +227,13 @@ def apply_cert2(domains, use_sudo=True, **kwargs):
         sio1 = StringIO()
         sio1.write(dumps(updated_conf))
         sio1.seek(0)
-        put(sio1, conf_name, use_sudo=use_sudo)
+        c.put(sio1, conf_name, use_sudo=use_sudo)
         return conf_name
 
     r = tuple(map(apply_cert, domains))
 
-    restart_systemd("nginx")
+    restart_systemd(c, "nginx")
     return {"updated_ssl_info": r}
+
+
+__all__ = ["install0", "add_cert1", "apply_cert2"]

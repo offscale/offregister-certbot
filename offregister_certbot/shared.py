@@ -1,21 +1,33 @@
-from fabric.operations import run, sudo
 from offregister_fab_utils.apt import apt_depends
 from offregister_fab_utils.fs import cmd_avail
 
 
-def install():
-    if cmd_avail("certbot"):
+def install(c):
+    """
+    :param c: Connection
+    :type c: ```fabric.connection.Connection```
+    """
+    if cmd_avail(c, "certbot"):
         return "certbot already installed"
-    uname = run("uname -v")
-    if "Ubuntu" in uname:
-        dist_version = float(run("lsb_release -rs", quiet=True))
-        py_dep = "python-certbot-nginx"
-        if dist_version < 20.04:
-            sudo("add-apt-repository -y ppa:certbot/certbot")
-        else:
-            py_dep = "python3-certbot-nginx"
-        apt_depends("certbot", py_dep)
-    elif "Debian" in uname:
-        sudo("apt-get install -y certbot python-certbot-nginx -t stretch-backports")
+    uname = c.run("uname -v").stdout
+    dist_version = float(c.run("lsb_release -rs", hide=True).stdout)
+    is_debian = "Debian" in uname
+    is_ubuntu = "Ubuntu" in uname
+    if is_debian or is_ubuntu:
+        apt_depends(
+            c,
+            "certbot",
+            "python{}-certbot-nginx".format(
+                "3"
+                if is_ubuntu
+                and dist_version >= 20.04
+                or is_debian
+                and dist_version >= 10
+                else ""
+            ),
+        )
     else:
         raise NotImplementedError()
+
+
+__all__ = ["install"]

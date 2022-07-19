@@ -43,6 +43,7 @@ if __name__ == "__main__":
             "License :: OSI Approved :: Apache Software License",
             "Programming Language :: Python",
             "Programming Language :: Python :: 2.7",
+            "Programming Language :: Python :: 3",
         ],
         install_requires=["pyyaml"],
         test_suite=package_name + ".tests",
