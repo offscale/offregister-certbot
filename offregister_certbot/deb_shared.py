@@ -1,5 +1,5 @@
 from datetime import datetime
-from sys import version
+from sys import version, stderr
 
 from nginx_parse_emit.emit import (
     upsert_redirect_to_443_block,
@@ -63,7 +63,7 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
     cmd = partial(
         c.sudo,
         user=kwargs.get("as_user", "root"),
-        group=kwargs.get("as_group", "root"),
+        # group=kwargs.get("as_group", "root"),
     )
 
     _grep_conf = "grep -lER {pat} {sites_enabled}".format(
@@ -80,6 +80,7 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
     confs = cmd(_grep_conf, warn=True)
 
     if confs.exited != 0:
+        stderr.write(confs.stderr)
         raise EnvironmentError(
             "grep failed with: {}. Failed command: {}".format(confs, _grep_conf)
         )
