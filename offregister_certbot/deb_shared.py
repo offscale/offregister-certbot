@@ -1,11 +1,13 @@
 from datetime import datetime
-from sys import version, stderr
+from sys import stderr, version
 
 from nginx_parse_emit.emit import (
     upsert_redirect_to_443_block,
     upsert_ssl_cert_to_443_block,
 )
 from nginxparser import dumps
+from offregister_fab_utils.fs import cmd_avail
+from patchwork.files import exists
 
 from offregister_certbot.shared import install
 
@@ -65,6 +67,12 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
         user=kwargs.get("as_user", "root"),
         # group=kwargs.get("as_group", "root"),
     )
+
+    if not cmd_avail(c, "nginx"):
+        raise EnvironmentError("nginx is not installed | not found in PATH")
+
+    if not exists(c, runner=cmd, path=sites_enabled):
+        raise EnvironmentError("No confs found in \"{}\"".format(sites_enabled))
 
     _grep_conf = "grep -lER {pat} {sites_enabled}".format(
         pat=" -e "
