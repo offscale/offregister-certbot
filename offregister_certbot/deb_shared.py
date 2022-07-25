@@ -68,11 +68,11 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
         # group=kwargs.get("as_group", "root"),
     )
 
-    if not cmd_avail(c, "nginx"):
+    if not cmd_avail(c, "nginx") and not exists(c, runner=cmd, path="/usr/sbin/nginx"):
         raise EnvironmentError("nginx is not installed | not found in PATH")
 
     if not exists(c, runner=cmd, path=sites_enabled):
-        raise EnvironmentError("No confs found in \"{}\"".format(sites_enabled))
+        raise EnvironmentError('No confs found in "{}"'.format(sites_enabled))
 
     _grep_conf = "grep -lER {pat} {sites_enabled}".format(
         pat=" -e "
@@ -97,7 +97,9 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
         # print(_grep_conf, file=sys.stderr)
         raise ReferenceError("No confs found matching domains searched for")
 
-    confs = [s.rstrip().replace(sites_enabled + "/", "") for s in confs.split("\n")]
+    confs = [
+        s.rstrip().replace(sites_enabled + "/", "") for s in confs.stdout.split("\n")
+    ]
 
     cmd(
         "mv '{sites_enabled}/'{confs} '{sites_disabled}/'".format(
@@ -110,8 +112,9 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
     )
 
     def apply_conf(domain):
-        root = cmd("mktemp -d --suffix .nginx").stdout
-        nginx.setup_conf0(
+        root = c.sudo("mktemp -d --suffix .nginx").stdout.strip()
+        assert root != "/"
+        nginx.setup_custom_conf2(
             c,
             nginx_conf="static.conf",
             SERVER_NAME=domain,
@@ -121,9 +124,7 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
             ),
             skip_nginx_restart=True,
         )
-        with c.cd(root):
-            cmd("touch index.html")
-        cmd("chmod -R 755 {root}".format(root=root))
+        cmd("touch {root}/index.html && chmod -R 755 {root}".format(root=root))
         return root
 
     static_dirs = tuple(map(apply_conf, domains))
@@ -131,7 +132,7 @@ def add_cert1(c, domains, email, server="nginx", **kwargs):
     def exclude_valid_certs(domain):
         cert_details = c.sudo(
             "certbot certificates --cert-name {domain}".format(domain=domain)
-        )
+        ).stdout
 
         if "Expiry Date" not in cert_details:
             return domain
@@ -216,7 +217,7 @@ def apply_cert2(c, domains, use_sudo=True, **kwargs):
         )
         # cStringIO.StringIO, StringIO.StringIO, TemporaryFile, SpooledTemporaryFile all failed :(
         tempfile = mkstemp(domain)[1]
-        c.get(remote_path=conf_name, local_path=tempfile, use_sudo=use_sudo)
+        c.get(remote=conf_name, local=tempfile, use_sudo=use_sudo)
 
         updated_conf = upsert_ssl_cert_to_443_block(
             conf_file=upsert_redirect_to_443_block(
