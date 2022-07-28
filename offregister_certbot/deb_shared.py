@@ -217,7 +217,7 @@ def apply_cert2(c, domains, use_sudo=True, **kwargs):
         )
         # cStringIO.StringIO, StringIO.StringIO, TemporaryFile, SpooledTemporaryFile all failed :(
         tempfile = mkstemp(domain)[1]
-        c.get(remote=conf_name, local=tempfile, use_sudo=use_sudo)
+        c.get(remote=conf_name, local=tempfile)
 
         updated_conf = upsert_ssl_cert_to_443_block(
             conf_file=upsert_redirect_to_443_block(
@@ -237,7 +237,7 @@ def apply_cert2(c, domains, use_sudo=True, **kwargs):
         sio1 = StringIO()
         sio1.write(dumps(updated_conf))
         sio1.seek(0)
-        c.put(sio1, conf_name, use_sudo=use_sudo)
+        c.put(sio1, conf_name)  # use_sudo=use_sudo)
         return conf_name
 
     r = tuple(map(apply_cert, domains))
