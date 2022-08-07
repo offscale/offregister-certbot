@@ -9,8 +9,8 @@ def install(c):
     """
     if cmd_avail(c, "certbot"):
         return "certbot already installed"
-    uname = c.run("uname -v").stdout
-    dist_version = float(c.run("lsb_release -rs", hide=True).stdout)
+    uname = c.run("uname -v").stdout.rstrip()
+    dist_version = float(c.run("lsb_release -rs", hide=True).stdout.rstrip())
     is_debian = "Debian" in uname
     is_ubuntu = "Ubuntu" in uname
     if is_debian or is_ubuntu:

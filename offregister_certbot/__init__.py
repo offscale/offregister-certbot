@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import logging.config
 from os import path
 
 import yaml
@@ -26,3 +27,5 @@ def get_logger(name=None):
 
 
 root_logger = get_logger()
+
+__all__ = ["get_logger", "root_logger"]
